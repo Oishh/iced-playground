@@ -3,9 +3,7 @@
 
 use highlight::{should_update_droppable, zone_update, Highlight, Highlightable, ZoneUpdate};
 use iced::{
-    advanced::widget::Id,
-    widget::{column, container, text},
-    Element, Length, Point, Rectangle, Task,
+    advanced::widget::Id, border, widget::{button, column, container, horizontal_space, row, text}, Alignment::Center, Element, Font, Length::{self, Fill}, Point, Rectangle, Task
 };
 use iced_drop::find_zones;
 use iced_drop::widget::droppable::State as DroppableState;
@@ -49,7 +47,10 @@ impl Default for TodoBoard {
                 Slot::new(List::new("Todo")),
                 Slot::new(List::new("Doing")),
                 Slot::new(List::new("Done")),
-            ]),
+                Slot::new(List::new("Todo2")),
+                Slot::new(List::new("Doing2")),
+                Slot::new(List::new("Done2")),
+            ], 3),
             todos_highlight: Highlight::default(),
             lists_highlight: Highlight::default(),
         }
@@ -66,20 +67,68 @@ impl TodoBoard {
     }
 
     fn view(&self) -> Element<'_, Message> {
-        let header = container(text("TODO Board").size(30).style(theme::text::title))
-            .padding(10.0)
-            .width(Length::Fill)
-            .height(Length::Fixed(HEADER_HEIGHT))
-            .style(theme::container::title);
-        container(
-            column![header, self.tree.view()]
+        let header = row![
+            text("Example Header").size(20).font(Font::MONOSPACE),
+            horizontal_space(),
+            button("Board Management"),
+        ]
+        .spacing(20)
+        .align_y(Center);
+
+        // ===================== CONTENT =====================
+        // let pane_grid = create_pane_grid();
+        let pane_grid = container(
+            column![self.tree.view()]
                 .height(Length::Fill)
                 .width(Length::Fill),
         )
         .width(Length::Fill)
-        .height(Length::Fill)
-        .style(theme::container::background)
-        .into()
+        .height(Length::Fill);
+        // .style(theme::container::background);
+        // let pane_grid = text("Pane Grid").width(Fill).height(Fill).align_x(Center).align_y(Center).size(30).color(Color::WHITE);
+        // let pane_grid = create_pane(&self);
+        // ==========================================================
+
+        let sidebar = container(
+            column!["Sidebar!"]
+                .spacing(40)
+                .padding(10)
+                .width(200)
+                .align_x(Center),
+        ).center_y(Fill);
+        // .style(container::rounded_box);
+
+        let content = container(
+            // if self.boards {
+                row![pane_grid, sidebar].spacing(20)
+            // } else {
+            //     row![pane_grid].spacing(20)
+            // }
+        ).style(|theme| {
+            let palette = theme.extended_palette();
+
+            container::Style::default()
+                .border(border::color(palette.background.strong.color).width(4))
+        });
+
+        column![row![header], content]
+            .spacing(10)
+            .padding(20)
+            .into()
+        // let header = container(text("TODO Board").size(30).style(theme::text::title))
+        //     .padding(10.0)
+        //     .width(Length::Fill)
+        //     .height(Length::Fixed(HEADER_HEIGHT))
+        //     .style(theme::container::title);
+        // container(
+        //     column![header, self.tree.view()]
+        //         .height(Length::Fill)
+        //         .width(Length::Fill),
+        // )
+        // .width(Length::Fill)
+        // .height(Length::Fill)
+        // .style(theme::container::background)
+        // .into()
     }
 
     fn update(&mut self, message: Message) -> Task<Message> {

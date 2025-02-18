@@ -45,20 +45,47 @@ pub enum TreeElement {
 /// Contains items organized by slots, and lists
 pub struct TreeData {
     slots: Vec<Slot>,
+    rows: usize,
 }
 
 impl TreeData {
-    pub fn new(slots: Vec<Slot>) -> Self {
-        Self { slots }
+    pub fn new(slots: Vec<Slot>, rows: usize) -> Self {
+        Self { slots, rows }
     }
     /// Convert the tree into an element that iced can render
     pub fn view(&self) -> Element<Message> {
-        let children = self.slots.iter().enumerate().map(|(i, slot)| slot.view(i));
-        row(children)
-            .spacing(10.0)
-            .padding(20.0)
+        let total_slots = self.slots.len();
+        let chunk_size = if self.rows == 0 {
+            // Default to one row if rows is zero
+            total_slots
+        } else {
+            (total_slots as f64 / self.rows as f64).ceil() as usize
+        };
+
+        // Split the slots into chunks based on the chunk_ size
+        let children: Vec<Element<Message>> = self
+            .slots
+            .chunks(chunk_size)
+            .map(|chunk| {
+                // Create a row for each chunk of slots
+                let slot_children = chunk.iter().enumerate().map(|(i, slot)| slot.view(i));
+                
+                row(slot_children)
+                    .spacing(10.0)
+                    .padding(20.0)
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+                    .into()
+            })
+            .collect();
+
+        // Combine all rows into a single container with vertical layout
+        column(children)
+            .spacing(10.0)    // Adjust spacing between rows as needed
+            .padding(20.0)     // Add padding to the overall container
             .width(Length::Fill)
             .height(Length::Fill)
+            // .bg_color([0.9, 0.9, 0.9])   // Optional: background color for the container
             .into()
     }
 
@@ -122,6 +149,7 @@ impl Slot {
     /// Create a new slot with a list
     pub fn new(list: List) -> Self {
         let id = NEXT_SLOT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        eprintln!("Creating slot with id: {}", id); 
         let c_id = iced::widget::container::Id::new(format!("slot_{}", id));
         Self {
             id: Id::from(c_id.clone()),
@@ -167,6 +195,7 @@ impl List {
     /// Create a new list with a title
     pub fn new(title: &str) -> Self {
         let id = NEXT_LIST.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        eprintln!("Creating list with id: {}", id);
         Self {
             id: Id::new(format!("list_{}", id)),
             title: title.to_string(),
@@ -180,6 +209,7 @@ impl List {
 
     /// Convert the list into an element that iced can render
     fn view(&self, slot_index: usize) -> Element<Message> {
+        eprintln!("Rendered list with ID: {:?}", self.id);
         let name = text(self.title.clone())
             .size(20)
             .style(theme::text::list_name);
@@ -195,8 +225,14 @@ impl List {
             });
         droppable(content)
             .id(self.id.clone())
-            .on_drop(move |p, r| Message::DropList(location, p, r))
-            .on_drag(move |p, r| Message::DragList(location, p, r))
+            .on_drag(move |p, r| {
+                eprintln!("Dragging list at position {:?}", p);
+                Message::DragList(location, p, r)
+            })
+            .on_drop(move |p, r| {
+                eprintln!("Dropped list at position {:?}", p);
+                Message::DropList(location, p, r)
+            })
             .on_cancel(Message::ListDropCanceled)
             .drag_hide(true)
             .into()

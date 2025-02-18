@@ -1,34 +1,21 @@
-use std::sync::Arc;
-use std::sync::Mutex;
-use std::time::Duration;
-use std::time::Instant;
-
-use iced::alignment::Horizontal::Right;
 use iced::border;
-use iced::border::rounded;
-use iced::daemon::Appearance;
-use iced::keyboard;
 use iced::mouse;
-use iced::time;
 use iced::widget::pane_grid;
-use iced::widget::pane_grid::Axis;
 use iced::widget::responsive;
 use iced::widget::PaneGrid;
 use iced::widget::{
     button, canvas, center, checkbox, column, container,
-    horizontal_space, pick_list, row, scrollable,
+    horizontal_space, row,
     text,
 };
 use iced::Color;
 use iced::Size;
 use iced::{
-    color, Center, Element, Fill, Font, Length, Point, Rectangle, Renderer,
+    Center, Element, Fill, Font, Length, Point, Rectangle, Renderer,
     Subscription, Theme,
 };
-use nats::nats::get_nats_message;
 use serde::Deserialize;
 use serde::Serialize;
-use ws_handler::connect;
 
 mod nats;
 mod ws_handler;
@@ -238,32 +225,6 @@ impl Layout {
             // eprintln!("Received event from WebSocket: {:?}", event);
             event
         })
-
-        // let message_clone = Arc::clone(&self.stream_data);
-
-        // std::thread::spawn(move || {
-        //     // Ideally, use an existing runtime if possible
-        //     let runtime = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
-            
-        //     match runtime.block_on(nats::nats::get_nats_message()) {
-        //         Ok(messages) => {
-        //             let mut messages_lock = message_clone.lock().unwrap();
-        //             *messages_lock = messages;
-        //         }
-        //         Err(e) => eprintln!("Error fetching NATS message: {:?}", e),
-        //     }
-        // });
-
-
-        // use keyboard::key;
-
-        // keyboard::on_key_release(|key, _modifiers| match key {
-        //     keyboard::Key::Named(key::Named::ArrowLeft) => {
-        //         Some(Message::Previous)
-        //     }
-        //     keyboard::Key::Named(key::Named::ArrowRight) => Some(Message::Next),
-        //     _ => None,
-        // })
     }
 
     fn view(&self) -> Element<Message> {
@@ -278,100 +239,10 @@ impl Layout {
         .align_y(Center);
 
         // ===================== CONTENT =====================
-
-        // let content = container(
-        //     scrollable(
-        //         column![
-        //             "Content goes here",
-        //         ]
-        //         .spacing(40)
-        //         // .align_x(Center)
-        //         // .width(Fill),
-        //     )
-        //     // .height(Fill),
-        // )
-        // .padding(10)
-        // // .style(container::rounded_box)
-        // .style(container::bordered_box);
-    
-        // let content: Element<Message> = column![content].into();
-
-        // let focus = self.focus;
-        // let total_panes = self.panes.len();
-
-        // let pane = create_pane(self.focus, self.panes.len(),&self.panes);
-        let pane_grid = create_pane(&self);
-
-        // let pane_grid = PaneGrid::new(&self.panes, |id, pane, is_maximized| {
-        //     let is_focused = focus == Some(id);
-
-        //     let title = row![
-        //         "Pane",
-        //         text(pane.id.to_string()).color(if is_focused {
-        //             PANE_ID_COLOR_FOCUSED
-        //         } else {
-        //             PANE_ID_COLOR_UNFOCUSED
-        //         }),
-        //     ]
-        //     .spacing(5);
-
-        //     let title_bar = pane_grid::TitleBar::new(title)
-        //         .controls(pane_grid::Controls::dynamic(
-        //             view_controls(
-        //                 id,
-        //                 total_panes,
-        //                 pane.is_pinned,
-        //                 is_maximized,
-        //             ),
-        //             button(text("X").size(14))
-        //                 .style(button::danger)
-        //                 .padding(3)
-        //                 .on_press_maybe(
-        //                     if total_panes > 1 && !pane.is_pinned {
-        //                         Some(Message::Close(id))
-        //                     } else {
-        //                         None
-        //                     },
-        //                 ),
-        //         ))
-        //         .padding(10)
-        //         .style(if is_focused {
-        //             style::title_bar_focused
-        //         } else {
-        //             style::title_bar_active
-        //     });
-
-        //     pane_grid::Content::new(responsive(move |size| {
-        //         view_content(id, total_panes, pane.is_pinned, size)
-        //     }))
-        //     .title_bar(title_bar)
-        //     .style(if is_focused {
-        //         style::pane_focused
-        //     } else {
-        //         style::pane_active
-        //     })
-        // })
-        // .width(Fill)
-        // .height(Fill)
-        // .spacing(10)
-        // .on_click(Message::Clicked)
-        // .on_drag(Message::Dragged)
-        // .on_resize(10, Message::Resized);
-
+        // let pane_grid = create_pane_grid();
+        let pane_grid = text("Pane Grid").width(Fill).height(Fill).align_x(Center).align_y(Center).size(30).color(Color::WHITE);
+        // let pane_grid = create_pane(&self);
         // ==========================================================
-
-        // let example = center(if self.explain {
-        //     content.explain(color!(0x0000ff))
-        // } else {
-        //     content
-        // })
-        // .style(|theme| {
-        //     let palette = theme.extended_palette();
-
-        //     container::Style::default()
-        //         .border(border::color(palette.background.strong.color).width(4))
-        // })
-        // .padding(4);
 
         let sidebar = container(
             column!["Sidebar!", square(50), square(50)]
@@ -394,32 +265,6 @@ impl Layout {
             container::Style::default()
                 .border(border::color(palette.background.strong.color).width(4))
         });
-
-        // let content = row![example, sidebar].style(|theme| {
-        //     let palette = theme.extended_palette();
-
-        //     container::Style::default()
-        //         .border(border::color(palette.background.strong.color).width(4))
-        // });
-
-
-        // let controls = row([
-        //     (!self.example.is_first()).then_some(
-        //         button("← Previous")
-        //             .padding([5, 10])
-        //             .on_press(Message::Previous)
-        //             .into(),
-        //     ),
-        //     Some(horizontal_space().into()),
-        //     (!self.example.is_last()).then_some(
-        //         button("Next →")
-        //             .padding([5, 10])
-        //             .on_press(Message::Next)
-        //             .into(),
-        //     ),
-        // ]
-        // .into_iter()
-        // .flatten());
 
         column![row![header], content]
             .spacing(10)
@@ -491,63 +336,6 @@ fn view_content<'a>(
     is_pinned: bool,
     size: Size,
 ) -> Element<'a, Message> {
-    // let button = |label, message| {
-    //     button(text(label).width(Fill).align_x(Center).size(16))
-    //         .width(Fill)
-    //         .padding(8)
-    //         .on_press(message)
-    // };
-
-    // let controls: iced::widget::Column<'_, Message> = column![
-    //     button(
-    //         "Split horizontally",
-    //         Message::Split(pane_grid::Axis::Horizontal, pane),
-    //     ),
-    //     button(
-    //         "Split vertically",
-    //         Message::Split(pane_grid::Axis::Vertical, pane),
-    //     )
-    // ]
-    // .push_maybe(if total_panes > 1 && !is_pinned {
-    //     Some(button("Close", Message::Close(pane)).style(button::danger))
-    // } else {
-    //     None
-    // })
-    // .spacing(5)
-    // .max_width(160);
-
-    // // let board_container = container("This text is centered inside a rounded box!")
-    // // .padding(10)
-    // // .center(800)
-    // // .style(container::rounded_box);
-
-    // let board_container: Element<'a, Message> = column![
-    //     "A column can be used to",
-    //     "lay out widgets vertically.",
-    //     "The amount of space between",
-    //     "elements can be configured!",
-    // ]
-    // .height(Fill)
-    // .spacing(40)
-    // .into();
-
-    // // button("Manage Board", Message::BoardManagement).style(button::danger)
-    // //         .width(Fill)
-    // //         .padding(8)
-    // //         .on_press(Message::BoardManagement)
-
-    // let content =
-    //     column![text!("{}x{}", size.width, size.height).size(24), controls]
-    //         .spacing(10)
-    //         .align_x(Center);
-
-    // // let content =
-    // //     column![text!("{}x{}", size.width, size.height).size(24)]
-    // //         .spacing(10)
-    // //         .align_x(Center);
-
-    // // let content = row![content_1].spacing(5);
-
     let content = column!["TEST"].spacing(10).align_x(Center);
 
 

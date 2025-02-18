@@ -5,4 +5,4 @@ edition = "2021"
 
 [dependencies]
 iced = { version = "0.13", features = ["advanced"] }
-iced_drop = { path = "../.." }
+iced_drop = { git = "https://github.com/jhannyj/iced_drop" }

@@ -44,12 +44,12 @@ impl Default for TodoBoard {
     fn default() -> Self {
         Self {
             tree: TreeData::new(vec![
-                Slot::new(List::new("Todo")),
-                Slot::new(List::new("Doing")),
-                Slot::new(List::new("Done")),
-                Slot::new(List::new("Todo2")),
-                Slot::new(List::new("Doing2")),
-                Slot::new(List::new("Done2")),
+                Slot::new(List::new("Perp Risk Metrics")),
+                Slot::new(List::new("Perp Performance Metrics")),
+                Slot::new(List::new("Positions")),
+                Slot::new(List::new("Open Orders")),
+                Slot::new(List::new("Trade History")),
+                Slot::new(List::new("Funding History")),
             ], 3),
             todos_highlight: Highlight::default(),
             lists_highlight: Highlight::default(),

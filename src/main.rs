@@ -1,11 +1,14 @@
-use std::sync::Arc;
-
-use iced::keyboard;
-use iced::widget::pane_grid::{self, Axis, PaneGrid};
+use iced::alignment::Alignment;
+use iced::theme::{self, Theme};
+use iced::widget::pane_grid::Pane;
 use iced::widget::{
-    button, center_y, column, container, responsive, row, scrollable, text,
+    button, checkbox, column, container, horizontal_space, pane_grid, pick_list, row, scrollable, text, text_input, vertical_space, Button, Column, Container, PaneGrid, PickList, Text
 };
-use iced::{Center, Color, Element, Fill, Size, Subscription};
+use iced::Alignment::Center;
+use iced::{
+    executor, keyboard, Application, Color, Element,
+    Event, Font, Length, Settings, Size, Subscription,
+};
 
 pub fn main() -> iced::Result {
     iced::application("Pane Grid - Iced", Example::update, Example::view)
@@ -15,9 +18,23 @@ pub fn main() -> iced::Result {
 
 #[derive(Clone)]
 struct Example {
-    panes: pane_grid::State<Pane>,
+    panes: pane_grid::State<DefinedPane>,
     panes_created: usize,
     focus: Option<pane_grid::Pane>,
+    pane_contents: Vec<(Pane, PaneContent)>
+}
+
+#[derive(Debug, Clone, Copy)]
+enum PaneContent {
+    Text,
+    Buttons,
+    Image,
+}
+
+impl Default for Example {
+    fn default() -> Self {
+        Example::new()
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -28,29 +45,52 @@ enum Message {
     Clicked(pane_grid::Pane),
     Dragged(pane_grid::DragEvent),
     Resized(pane_grid::ResizeEvent),
-    TogglePin(pane_grid::Pane),
     Maximize(pane_grid::Pane),
     Restore,
     Close(pane_grid::Pane),
     CloseFocused,
+    TogglePin(pane_grid::Pane),
 }
 
 impl Example {
     fn new() -> Self {
-        let (panes, _) = pane_grid::State::new(Pane::new(0));
+        // Create the initial pane state
+        let (mut state, first) = pane_grid::State::new(DefinedPane::new(0));
+
+        // Split the first pane vertically
+        let (second, _) = state
+            .split(pane_grid::Axis::Vertical, first, DefinedPane::new(1))
+            .unwrap();
+
+        // Split the right pane horizontally
+        let (third, _) = state
+            .split(pane_grid::Axis::Horizontal, second, DefinedPane::new(2))
+            .unwrap();
 
         Example {
-            panes,
-            panes_created: 1,
+            panes: state,
+            panes_created: 3,
             focus: None,
+            pane_contents: vec![
+                (first, PaneContent::Text),
+                (second, PaneContent::Buttons),
+                (third, PaneContent::Image),
+            ].into_iter().collect(),
         }
+    }
+
+    fn title(&self) -> String {
+        String::from("Pane grid - Iced")
     }
 
     fn update(&mut self, message: Message) {
         match message {
             Message::Split(axis, pane) => {
-                let result =
-                    self.panes.split(axis, pane, Pane::new(self.panes_created));
+                let result = self.panes.split(
+                    axis,
+                    pane,
+                    DefinedPane::new(self.panes_created),
+                );
 
                 if let Some((pane, _)) = result {
                     self.focus = Some(pane);
@@ -63,7 +103,7 @@ impl Example {
                     let result = self.panes.split(
                         axis,
                         pane,
-                        Pane::new(self.panes_created),
+                        DefinedPane::new(self.panes_created),
                     );
 
                     if let Some((pane, _)) = result {
@@ -75,7 +115,8 @@ impl Example {
             }
             Message::FocusAdjacent(direction) => {
                 if let Some(pane) = self.focus {
-                    if let Some(adjacent) = self.panes.adjacent(pane, direction)
+                    if let Some(adjacent) =
+                        self.panes.adjacent(pane, direction)
                     {
                         self.focus = Some(adjacent);
                     }
@@ -84,22 +125,16 @@ impl Example {
             Message::Clicked(pane) => {
                 self.focus = Some(pane);
             }
+            Message::Dragged(pane_grid::DragEvent::Dropped { pane, target }) => {
+                self.panes.drop(pane, target);
+            }
+            Message::Dragged(_) => {}
             Message::Resized(pane_grid::ResizeEvent { split, ratio }) => {
                 self.panes.resize(split, ratio);
             }
-            Message::Dragged(pane_grid::DragEvent::Dropped {
-                pane,
-                target,
-            }) => {
-                self.panes.drop(pane, target)
+            Message::Maximize(pane) => {
+                self.panes.maximize(pane);
             }
-            Message::Dragged(_) => {}
-            Message::TogglePin(pane) => {
-                if let Some(Pane { is_pinned, .. }) = self.panes.get_mut(pane) {
-                    *is_pinned = !*is_pinned;
-                }
-            }
-            Message::Maximize(pane) => self.panes.maximize(pane),
             Message::Restore => {
                 self.panes.restore();
             }
@@ -110,13 +145,18 @@ impl Example {
             }
             Message::CloseFocused => {
                 if let Some(pane) = self.focus {
-                    if let Some(Pane { is_pinned, .. }) = self.panes.get(pane) {
+                    if let Some(DefinedPane { is_pinned, .. }) = self.panes.get(pane) {
                         if !is_pinned {
                             if let Some((_, sibling)) = self.panes.close(pane) {
                                 self.focus = Some(sibling);
                             }
                         }
                     }
+                }
+            }
+            Message::TogglePin(pane) => {
+                if let Some(DefinedPane { is_pinned, .. }) = self.panes.get_mut(pane) {
+                    *is_pinned = !*is_pinned;
                 }
             }
         }
@@ -136,82 +176,62 @@ impl Example {
         let focus = self.focus;
         let total_panes = self.panes.len();
 
-        let pane_grid = container(PaneGrid::new(&self.panes, |id, pane: &Pane, is_maximized| {
+        let pane_grid = PaneGrid::new(&self.panes, |id, pane, is_maximized| {
             let is_focused = focus == Some(id);
 
-            let mut self_clone = self.clone();
-
-            self_clone.panes.split(Axis::Horizontal, id, Pane::new(self.panes_created));
-
-            let pin_button = button(
-                text(if pane.is_pinned { "Unpin" } else { "Pin" }).size(14),
+            let title = pane_grid::TitleBar::new(
+                row![
+                    text("Pane").size(16),
+                    text(pane.id.to_string())
+                        .size(16)
+                        .color(if is_focused {
+                            PANE_ID_COLOR_FOCUSED
+                        } else {
+                            PANE_ID_COLOR_UNFOCUSED
+                        }),
+                ]
+                .spacing(5)
+                .align_y(Alignment::Center),
             )
-            .on_press(Message::TogglePin(id))
-            .padding(3);
+            .style(if is_focused {
+                style::title_bar_focused
+            } else {
+                style::title_bar_active
+            })
+            .padding(10);
 
-            let title = row![
-                pin_button,
-                "Pane",
-                text(pane.id.to_string()).color(if is_focused {
-                    PANE_ID_COLOR_FOCUSED
-                } else {
-                    PANE_ID_COLOR_UNFOCUSED
-                }),
-            ]
-            .spacing(5);
+            let is_pinned = pane.is_pinned;
 
-            let title_bar = pane_grid::TitleBar::new(title)
-                .controls(pane_grid::Controls::dynamic(
-                    view_controls(
-                        id,
-                        total_panes,
-                        pane.is_pinned,
-                        is_maximized,
-                    ),
-                    button(text("X").size(14))
-                        .style(button::danger)
-                        .padding(3)
-                        .on_press_maybe(
-                            if total_panes > 1 && !pane.is_pinned {
-                                Some(Message::Close(id))
-                            } else {
-                                None
-                            },
-                        ),
-                ))
-                .padding(10)
-                .style(if is_focused {
-                    style::title_bar_focused
-                } else {
-                    style::title_bar_active
-                });
+            let content = self.pane_contents
+            .iter()
+            .find(|(p, _)| *p == id)
+            .map(|(_, content)| content)
+            .cloned()
+            .unwrap_or(PaneContent::Text);
+            
 
             pane_grid::Content::new(responsive(move |size| {
-                view_content(id, total_panes, pane.is_pinned, size)
+                match content {
+                    PaneContent::Text => view_text_content(id, total_panes, is_pinned, size),
+                    PaneContent::Buttons => view_buttons_content(id, total_panes, is_pinned, size),
+                    PaneContent::Image => view_image_content(id, total_panes, is_pinned, size),
+                }
             }))
-            .title_bar(title_bar)
+            .title_bar(title)
             .style(if is_focused {
                 style::pane_focused
             } else {
                 style::pane_active
             })
         })
-        .width(Fill)
-        .height(Fill)
+        .width(Length::Fill)
+        .height(Length::Fill)
         .spacing(10)
         .on_click(Message::Clicked)
         .on_drag(Message::Dragged)
-        .on_resize(10, Message::Resized)).padding(10).into();
+        .on_resize(10, Message::Resized);
 
-        pane_grid
-
-        // container(pane_grid).padding(10).into()
-    }
-}
-
-impl Default for Example {
-    fn default() -> Self {
-        Example::new()
+        container(pane_grid).padding(10).into()
     }
 }
 
@@ -249,13 +269,13 @@ fn handle_hotkey(key: keyboard::Key) -> Option<Message> {
     }
 }
 
-#[derive(Clone, Copy)]
-struct Pane {
+#[derive(Debug, Clone, Copy)]
+struct DefinedPane {
     id: usize,
     pub is_pinned: bool,
 }
 
-impl Pane {
+impl DefinedPane {
     fn new(id: usize) -> Self {
         Self {
             id,
@@ -271,71 +291,55 @@ fn view_content<'a>(
     size: Size,
 ) -> Element<'a, Message> {
     let button = |label, message| {
-        button(text(label).width(Fill).align_x(Center).size(16))
-            .width(Fill)
-            .padding(8)
-            .on_press(message)
+        Button::new(
+            Text::new(label)
+                .width(Length::Fill)
+                .align_x(Alignment::Center)
+                .size(16),
+        )
+        .width(Length::Fill)
+        .padding(8)
+        .on_press(message)
     };
 
-    let controls = column![
-        button(
+    let mut controls = Column::new()
+        .push(button(
             "Split horizontally",
             Message::Split(pane_grid::Axis::Horizontal, pane),
-        ),
-        button(
+        ))
+        .push(button(
             "Split vertically",
             Message::Split(pane_grid::Axis::Vertical, pane),
-        )
-    ]
-    .push_maybe(if total_panes > 1 && !is_pinned {
-        Some(button("Close", Message::Close(pane)).style(button::danger))
-    } else {
-        None
-    })
-    .spacing(5)
-    .max_width(160);
+        ))
+        .spacing(5)
+        .max_width(160);
 
-    let content =
-        column![text!("{}x{}", size.width, size.height).size(24), controls,]
-            .spacing(10)
-            .align_x(Center);
+    if total_panes > 1 && !is_pinned {
+        controls = controls.push(
+            button("Close", Message::Close(pane))
+                .style(button::danger),
+        );
+    }
 
-    center_y(scrollable(content)).padding(5).into()
+    let content = Column::new()
+        .push(Text::new(format!("{}x{}", size.width, size.height)).size(24))
+        .push(controls)
+        .spacing(10)
+        .align_x(Alignment::Center);
+
+    Container::new(scrollable(content))
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .align_y(Center)
+        .padding(5)
+        .into()
 }
 
-fn view_controls<'a>(
-    pane: pane_grid::Pane,
-    total_panes: usize,
-    is_pinned: bool,
-    is_maximized: bool,
-) -> Element<'a, Message> {
-    let row = row![].spacing(5).push_maybe(if total_panes > 1 {
-        let (content, message) = if is_maximized {
-            ("Restore", Message::Restore)
-        } else {
-            ("Maximize", Message::Maximize(pane))
-        };
-
-        Some(
-            button(text(content).size(14))
-                .style(button::secondary)
-                .padding(3)
-                .on_press(message),
-        )
-    } else {
-        None
-    });
-
-    let close = button(text("Close").size(14))
-        .style(button::danger)
-        .padding(3)
-        .on_press_maybe(if total_panes > 1 && !is_pinned {
-            Some(Message::Close(pane))
-        } else {
-            None
-        });
-
-    row.push(close).into()
+fn responsive(f: impl Fn(Size) -> Element<'static, Message> + 'static) -> Element<'static, Message> {
+    Container::new(iced::widget::responsive(f))
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .into()
 }
 
 mod style {
@@ -389,4 +393,45 @@ mod style {
             ..Default::default()
         }
     }
+}
+
+fn view_text_content<'a>(
+    pane: pane_grid::Pane,
+    total_panes: usize,
+    is_pinned: bool,
+    size: Size,
+) -> Element<'a, Message> {
+    // Implement text content view
+    Column::new()
+        .push(Text::new("Text Content").size(24))
+        .push(Text::new(format!("Pane size: {}x{}", size.width, size.height)))
+        .into()
+}
+
+fn view_buttons_content<'a>(
+    pane: pane_grid::Pane,
+    total_panes: usize,
+    is_pinned: bool,
+    size: Size,
+) -> Element<'a, Message> {
+    // Implement buttons content view
+    Column::new()
+        .push(Text::new("Buttons Content").size(24))
+        .push(Button::new("Button 1").on_press(Message::Clicked(pane)))
+        .push(Button::new("Button 2").on_press(Message::Clicked(pane)))
+        .into()
+}
+
+fn view_image_content<'a>(
+    pane: pane_grid::Pane,
+    total_panes: usize,
+    is_pinned: bool,
+    size: Size,
+) -> Element<'a, Message> {
+    // Implement image content view
+    // Note: You'll need to add an actual image here
+    Column::new()
+        .push(Text::new("Image Content").size(24))
+        .push(Text::new("(Placeholder for actual image)"))
+        .into()
 }
